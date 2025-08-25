@@ -23,14 +23,14 @@ const uploadSchema = z.object({
     .refine(
       (file) =>
         file?.[0] &&
-        ["audio/webm", "audio/m4a", "video/webm", "video/mp4"].includes(
+        ["audio/webm", "audio/m4a", "audio/x-m4a", "video/webm"].includes(
           file[0].type
         ),
-      { message: "Please upload a valid .webm, .m4a, or .mp4 file" }
+      { message: "Please upload a valid .webm or .m4a file" }
     ),
 });
 
-export default function UploadCard() {
+export default function UploadCard({ onResult }) {
   const [preview, setPreview] = useState(null);
 
   const form = useForm({
@@ -43,8 +43,25 @@ export default function UploadCard() {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        // Extract error message from server response
+        let message = "Upload failed";
+        try {
+          const errorData = await res.json();
+          message = errorData.message || JSON.stringify(errorData);
+        } catch (err) {
+          // fallback if response isn’t JSON
+          message = res.statusText || "Unknown error occurred";
+        }
+        throw new Error(message); // 👈 propagate meaningful error
+      }
       return res.json();
+    },
+    onSuccess: (data) => {
+      onResult?.(data);
+    },
+    onError: (err) => {
+      onResult?.({ error: err?.message });
     },
   });
 
@@ -53,7 +70,6 @@ export default function UploadCard() {
     formData.append("file", data.file[0]);
     mutation.mutate(formData);
 
-    // for local preview (audio/video tag)
     const file = data.file[0];
     const url = URL.createObjectURL(file);
     setPreview(url);
@@ -68,11 +84,11 @@ export default function UploadCard() {
       <CardContent>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="file">Upload File (.webm, .m4a, .mp4)</Label>
+            <Label htmlFor="file">Upload File (.webm, .m4a)</Label>
             <Input
               id="file"
               type="file"
-              accept=".webm,.m4a,.mp4"
+              accept=".webm,.m4a"
               {...form.register("file")}
             />
             {form.formState.errors.file && (
